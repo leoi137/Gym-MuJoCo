@@ -1,58 +1,67 @@
-"""Render the trained ant in a real-time window.
+"""Render a trained Ant policy in a real-time MuJoCo viewer window.
 
-Loads ant_sac.zip and runs N_EPISODES deterministic episodes. Each one pops
-up a MuJoCo viewer window; close the window or wait for the episode to end
-to move on.
+Loads the best-eval model from `runs/<run_name>/` and runs N_EPISODES of
+deterministic rollout. Each episode pops up a window; close it or wait for
+the episode to end to move on.
 
 Usage:
-    python watch.py
+    python watch.py --run baseline_2leg
+    python watch.py --run foot_contact_v1 --episodes 3 --latest
 """
+from __future__ import annotations
+
+import argparse
 from pathlib import Path
 
 import gymnasium as gym
 from stable_baselines3 import SAC
 
-MODEL_PATH = Path("ant_sac.zip")           # latest checkpoint (for resume)
-BEST_MODEL_PATH = Path("ant_sac_best.zip") # best-ever eval policy (for showing off)
-N_EPISODES = 5
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--run", type=str, required=True,
+                   help="run-name under runs/ (e.g. baseline_2leg)")
+    p.add_argument("--episodes", type=int, default=5,
+                   help="how many deterministic episodes to watch")
+    p.add_argument("--latest", action="store_true",
+                   help="use ant_sac.zip (latest) instead of ant_sac_best.zip")
+    return p.parse_args()
 
 
 def main() -> None:
-    # Prefer the best-ever model if train.py has saved one; otherwise fall back
-    # to the latest checkpoint. This protects you from watching a policy that
-    # happened to degrade late in training.
-    if BEST_MODEL_PATH.exists():
-        path = BEST_MODEL_PATH
-    elif MODEL_PATH.exists():
-        path = MODEL_PATH
+    args = parse_args()
+    run_dir = Path("runs") / args.run
+    best = run_dir / "ant_sac_best.zip"
+    latest = run_dir / "ant_sac.zip"
+
+    if args.latest:
+        path = latest
     else:
-        raise SystemExit("No model found. Train first with: python train.py")
+        # Prefer the best-eval snapshot; fall back to latest if no best yet.
+        path = best if best.exists() else latest
+
+    if not path.exists():
+        raise SystemExit(f"No model found in {run_dir} (looked for "
+                         f"{best.name} and {latest.name})")
     print(f"Loading {path}")
 
-    # render_mode="human" opens a live MuJoCo window.
-    # Use "rgb_array" instead if you want raw frames to make your own video.
+    # Always watch on the unwrapped Ant-v5 reward so videos from different
+    # shaping experiments are visually & numerically comparable.
     env = gym.make("Ant-v5", render_mode="human")
-
-    # Inference is tiny -- CPU is plenty and avoids GPU startup overhead.
-    model = SAC.load(path, device="cpu")
+    model = SAC.load(path, device="cpu")  # CPU is plenty for inference
 
     try:
-        for ep in range(N_EPISODES):
+        for ep in range(args.episodes):
             obs, _ = env.reset()
             total_reward = 0.0
             done = False
             while not done:
-                # deterministic=True uses the policy's mean action (no
-                # exploration noise) -- this is what you want for a "show".
                 action, _ = model.predict(obs, deterministic=True)
-                # Gymnasium step returns 5 values:
-                #   obs, reward, terminated, truncated, info
-                # terminated = the ant flipped over (task failure)
-                # truncated  = hit the 1000-step time limit
                 obs, reward, terminated, truncated, _ = env.step(action)
                 total_reward += float(reward)
                 done = terminated or truncated
-            print(f"Episode {ep + 1}/{N_EPISODES}: return = {total_reward:.1f}")
+            print(f"Episode {ep + 1}/{args.episodes}: return = {total_reward:.1f}")
     finally:
         env.close()
 
