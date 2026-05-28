@@ -1,0 +1,26 @@
+# Install with:
+#   pip install -r requirements.txt
+#
+# PyTorch ships as CUDA-specific wheels. The line below pulls torch 2.5.1
+# built against CUDA 12.1. For CPU-only or a different CUDA version, drop
+# the --extra-index-url line and follow https://pytorch.org/get-started/locally/
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+torch==2.5.1+cu121
+
+# Core RL stack
+gymnasium==1.2.3
+mujoco==3.8.1
+stable_baselines3==2.8.0
+
+# Video recording for the eval callback
+imageio==2.37.3
+imageio-ffmpeg==0.6.0
+
+# Numerics
+numpy==2.4.6
+
+# Logging & progress bar (progress_bar=True in SB3 needs tqdm + rich)
+tensorboard==2.20.0
+tqdm==4.67.3
+rich==15.0.0
