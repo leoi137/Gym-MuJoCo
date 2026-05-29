@@ -1,8 +1,8 @@
-# Ant-v5 with SAC (Stable-Baselines3 + MuJoCo)
+# MuJoCo locomotion with SAC (Stable-Baselines3 + MuJoCo)
 
 > 🚧 **Work in progress.** Functional and reproducible today; actively being polished. Expect frequent updates — issues and PRs welcome.
 
-Train a Soft Actor-Critic agent on the Gymnasium `Ant-v5` environment on GPU. Each experiment lives in its own directory under `runs/<run-name>/`, so different reward shapings, seeds, and hyperparameter sweeps can coexist without clobbering each other.
+Train Soft Actor-Critic agents on Gymnasium MuJoCo locomotion environments — `Ant-v5`, `Walker2d-v5`, `Humanoid-v5`, and friends — on GPU. Each experiment lives in its own directory under `runs/<run-name>/`, so different environments, reward shapings, seeds, and hyperparameter sweeps can coexist without clobbering each other. The environment is chosen per-run with `--env` and pinned in that run's `config.json`, so once a run is created you never re-specify it.
 
 ## The two trained policies
 
@@ -59,24 +59,30 @@ python watch.py --run baseline_2leg        # the two-legged baseline
 python watch.py --run foot_contact_v1      # the four-legged shaped policy
 ```
 
-Start a fresh experiment of your own:
+Start a fresh experiment of your own. `--env` is given once, at creation, and defaults to `Ant-v5`:
 
 ```bash
-# Baseline reward, default hyperparameters, 1M steps
+# Ant baseline, default hyperparameters, 1M steps
 python train.py --run-name my_baseline --seed 0 --steps 1_000_000
 
-# Foot-contact reward shaping
+# A different environment — just pass --env once
+python train.py --run-name walker_baseline --env Walker2d-v5 --seed 0 --steps 1_000_000
+python train.py --run-name humanoid_baseline --env Humanoid-v5 --seed 0 --steps 2_000_000
+
+# Foot-contact reward shaping (Ant-only — see note below)
 python train.py --run-name my_shaped --seed 0 --steps 1_000_000 \
                 --wrapper foot_contact \
                 --wrapper-kwargs '{"penalty": 1.0, "window": 50, "contact_threshold": 1.0}'
 ```
 
-Resume an interrupted run with the same `--run-name`:
+Resume an interrupted run with the same `--run-name` — `--env`, wrapper, and seed are all read back from `config.json`, so you only pass `--steps`:
 
 ```bash
-python train.py --run-name my_shaped --steps 2_000_000
-# wrapper / seed are read from runs/my_shaped/config.json automatically
+python train.py --run-name walker_baseline --steps 2_000_000
+# env / wrapper / seed are read from runs/walker_baseline/config.json automatically
 ```
+
+> **Note on the foot-contact wrapper:** it resolves four ankle geoms and only applies to `Ant-v5`. Don't pass `--wrapper foot_contact` on a 2-legged env like `Walker2d-v5` — it'll raise at init. Baseline (no wrapper) is the right choice for non-Ant envs anyway.
 
 ## Run directory layout
 
@@ -93,7 +99,7 @@ runs/foot_contact_v1/
 └── config.json          # wrapper, kwargs, seed, hparams that produced this run
 ```
 
-`config.json` is the source of truth for what produced a run. On resume, it overrides whatever `--wrapper` or `--seed` you pass on the CLI — this is intentional, so you can't accidentally change reward semantics mid-run and contaminate the replay buffer.
+`config.json` is the source of truth for what produced a run. On resume, it overrides whatever `--env`, `--wrapper`, or `--seed` you pass on the CLI — this is intentional, so you can't accidentally change the environment or reward semantics mid-run and contaminate the replay buffer.
 
 ## Two checkpoints per run
 
@@ -154,9 +160,9 @@ The wrapper lives in `wrappers.py` as `FootContactRewardWrapper` and is register
 
 | File | Purpose |
 | --- | --- |
-| `train.py` | train / resume SAC on Ant-v5 (per-run output dir, optional wrapper) |
-| `watch.py` | render a chosen run's best policy in a window |
-| `wrappers.py` | reward-shaping wrappers (currently `FootContactRewardWrapper`) and the `WRAPPERS` registry |
+| `train.py` | train / resume SAC on any MuJoCo env (per-run `--env`, output dir, optional wrapper) |
+| `watch.py` | render a chosen run's best policy in a window (env read from its `config.json`) |
+| `wrappers.py` | reward-shaping wrappers (currently `FootContactRewardWrapper`, Ant-only) and the `WRAPPERS` registry |
 | `runs/<name>/` | one self-contained experiment — model, buffer, TB logs, videos, config |
 | `assets/` | GIFs used by this README |
 

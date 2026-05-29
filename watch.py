@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import gymnasium as gym
@@ -46,9 +47,17 @@ def main() -> None:
                          f"{best.name} and {latest.name})")
     print(f"Loading {path}")
 
-    # Always watch on the unwrapped Ant-v5 reward so videos from different
-    # shaping experiments are visually & numerically comparable.
-    env = gym.make("Ant-v5", render_mode="human")
+    # Read which env this run trained on from its config; fall back to Ant-v5
+    # for legacy runs created before env_id was recorded. Always watch on the
+    # unwrapped reward so videos from different shaping experiments are
+    # visually & numerically comparable.
+    config_path = run_dir / "config.json"
+    if config_path.exists():
+        env_id = json.loads(config_path.read_text()).get("env_id", "Ant-v5")
+    else:
+        env_id = "Ant-v5"
+    print(f"Env: {env_id}")
+    env = gym.make(env_id, render_mode="human")
     model = SAC.load(path, device="cpu")  # CPU is plenty for inference
 
     try:

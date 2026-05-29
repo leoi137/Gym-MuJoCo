@@ -38,7 +38,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 from wrappers import WRAPPERS
 
-ENV_ID = "Ant-v5"
+DEFAULT_ENV = "Ant-v5"
 
 # --- Hyperparameters (the spec) --------------------------------------------
 LEARNING_RATE = 3e-4
@@ -59,10 +59,10 @@ def _run_paths(run_dir: Path) -> dict[str, Path]:
     }
 
 
-def _make_env(wrapper_name: str | None, wrapper_kwargs: dict[str, Any], seed: int | None,
-              render_mode: str | None = None) -> gym.Env:
-    """Build an Ant-v5 env, optionally wrapped, optionally seeded."""
-    env = gym.make(ENV_ID, render_mode=render_mode)
+def _make_env(env_id: str, wrapper_name: str | None, wrapper_kwargs: dict[str, Any],
+              seed: int | None, render_mode: str | None = None) -> gym.Env:
+    """Build a MuJoCo env by id, optionally wrapped, optionally seeded."""
+    env = gym.make(env_id, render_mode=render_mode)
     if wrapper_name is not None:
         if wrapper_name not in WRAPPERS:
             raise ValueError(f"Unknown wrapper {wrapper_name!r}. "
@@ -163,14 +163,15 @@ def _load_or_init_config(paths: dict[str, Path], args: argparse.Namespace) -> di
     if paths["config"].exists():
         config = json.loads(paths["config"].read_text())
         print(f"[config] loaded existing config from {paths['config']}")
-        if args.wrapper is not None or args.wrapper_kwargs != "{}" or args.seed is not None:
-            print("[config] note: --wrapper/--seed args ignored on resume "
+        if (args.wrapper is not None or args.wrapper_kwargs != "{}"
+                or args.seed is not None or args.env != DEFAULT_ENV):
+            print("[config] note: --env/--wrapper/--seed args ignored on resume "
                   "(config.json is the source of truth)")
         return config
 
     wrapper_kwargs = json.loads(args.wrapper_kwargs)
     config = {
-        "env_id": ENV_ID,
+        "env_id": args.env,
         "algo": "SAC",
         "wrapper": args.wrapper,
         "wrapper_kwargs": wrapper_kwargs,
@@ -225,6 +226,9 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--run-name", type=str, required=True,
                    help="subdirectory under runs/ to write artifacts into")
+    p.add_argument("--env", type=str, default=DEFAULT_ENV,
+                   help=f"Gymnasium env id, set once at run creation "
+                        f"(default: {DEFAULT_ENV}); pinned in config.json on resume")
     p.add_argument("--steps", type=int, default=750_000,
                    help="env-steps to run THIS invocation (default: 750_000)")
     p.add_argument("--video-every", type=int, default=50_000,
@@ -245,16 +249,17 @@ def main() -> None:
     paths = _run_paths(run_dir)
 
     config = _load_or_init_config(paths, args)
+    env_id = config["env_id"]
     wrapper_name = config["wrapper"]
     wrapper_kwargs = config["wrapper_kwargs"]
     seed = config["seed"]
 
-    train_env = _make_env(wrapper_name, wrapper_kwargs, seed)
+    train_env = _make_env(env_id, wrapper_name, wrapper_kwargs, seed)
     model, is_resume = _build_model(train_env, paths, seed)
 
     callbacks = []
     if args.video_every > 0:
-        eval_env = _make_env(wrapper_name, wrapper_kwargs, seed, render_mode="rgb_array")
+        eval_env = _make_env(env_id, wrapper_name, wrapper_kwargs, seed, render_mode="rgb_array")
         callbacks.append(VideoEvalCallback(
             eval_env=eval_env,
             record_every=args.video_every,
