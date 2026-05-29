@@ -35,6 +35,9 @@ videos/
 # Best-model trackers
 *_best.txt
 
+# Claude Code
+CLAUDE.md
+
 # OS / editor
 .DS_Store
 Thumbs.db
