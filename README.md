@@ -4,7 +4,9 @@
 
 Train Soft Actor-Critic agents on Gymnasium MuJoCo locomotion environments — `Ant-v5`, `Walker2d-v5`, `Humanoid-v5`, and friends — on GPU. Each experiment lives in its own directory under `runs/<run-name>/`, so different environments, reward shapings, seeds, and hyperparameter sweeps can coexist without clobbering each other. The environment is chosen per-run with `--env` and pinned in that run's `config.json`, so once a run is created you never re-specify it.
 
-## The two trained policies
+## Trained policies
+
+### Ant-v5
 
 <p align="center">
   <img src="assets/baseline_2leg.gif" alt="Baseline SAC policy on Ant-v5" width="400"/>
@@ -24,6 +26,26 @@ Train Soft Actor-Critic agents on Gymnasium MuJoCo locomotion environments — `
 | `foot_contact_v1` | default + foot-contact penalty | 3.75M | 5,647 (shaped) | uses all four |
 
 The baseline scores higher in raw forward-velocity reward because it doesn't pay the shaping penalty, but it converged to a degenerate gait. The foot-contact run intentionally trades a bit of forward velocity for a four-legged gait that actually looks like quadrupedal locomotion. See [Why two trained policies?](#why-two-trained-policies) for the full story.
+
+### Walker2d-v5
+
+<p align="center">
+  <img src="assets/walker_baseline.gif" alt="Baseline SAC policy on Walker2d-v5" width="400"/>
+</p>
+
+<p align="center">
+  <em>Baseline (default Walker2d-v5 reward) — a stable 2D walking gait.</em>
+</p>
+
+| Run | Reward function | Steps | Best eval return | Gait |
+| --- | --- | --- | --- | --- |
+| `walker_baseline` | default Walker2d-v5 | 3.75M | 5,944 | upright 2-legged walk |
+
+The same SAC setup and hyperparameters that train Ant transfer directly to Walker2d — no reward shaping needed. A 2D biped can't move forward without using both legs, so there's no degenerate local optimum to shape away (which is why the foot-contact wrapper is Ant-only).
+
+```bash
+python watch.py --run walker_baseline   # watch this policy live
+```
 
 ## Install
 
