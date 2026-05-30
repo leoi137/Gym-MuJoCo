@@ -47,6 +47,26 @@ The same SAC setup and hyperparameters that train Ant transfer directly to Walke
 python watch.py --run walker_baseline   # watch this policy live
 ```
 
+### Humanoid-v5
+
+<p align="center">
+  <img src="assets/humanoid_baseline.gif" alt="Baseline SAC policy on Humanoid-v5" width="400"/>
+</p>
+
+<p align="center">
+  <em>Baseline (default Humanoid-v5 reward) — an upright 3D bipedal walk.</em>
+</p>
+
+| Run | Reward function | Steps | Best eval return | Gait |
+| --- | --- | --- | --- | --- |
+| `humanoid_baseline` | default Humanoid-v5 | 4M | 6,458 | upright 3D bipedal walk |
+
+Humanoid-v5 is the hardest of the three — a 17-DoF 3D biped with a ~350-dim observation — but the same SAC setup and hyperparameters that train Ant and Walker2d transfer directly, with no reward shaping. Like Walker2d, a biped can't move forward on a degenerate gait, so there's no local optimum to shape away; it just needs more steps to converge.
+
+```bash
+python watch.py --run humanoid_baseline   # watch this policy live
+```
+
 ## Install
 
 ```bash
