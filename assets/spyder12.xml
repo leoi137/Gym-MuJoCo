@@ -1,0 +1,150 @@
+<mujoco model="spyder12">
+  <!-- Spyder-v0: the 12-DoF spider — Gymnasium's Ant with one extra joint per leg.
+       Same sphere torso, same X-stance, same capsule construction and Ant-like
+       physics defaults. The only structural change: each leg's single flat
+       segment pair becomes a spider leg chain,
+
+           torso ── hip (yaw, red) ── lift (pitch, green) ── knee (pitch, blue)
+
+       The added LIFT joint is the whole upgrade: with 2 joints a foot is stuck
+       on a 1-D curve; with 3 it can be placed anywhere in its 3-D workspace,
+       which is what stepping onto rocks, crouching, and terrain work require.
+       See docs/design_spyder12.md for the full rationale and numbers.
+
+       Body count stays 13 (torso + 3 per leg), matching Ant's, so AntEnv's
+       contact-force observation block keeps the familiar 13x6 layout.
+       This is NOT drop-in Ant-v5 (12 actuators, larger obs) — it registers as
+       its own env, Spyder-v0 (envs/spyder_env.py). -->
+  <compiler angle="degree" coordinate="local" inertiafromgeom="true"/>
+  <option integrator="RK4" timestep="0.01"/>
+
+  <default>
+    <!-- Ant-like feel, plus a light joint spring: springs return each joint to
+         the authored stance (qpos 0), so the robot holds its arch at zero
+         torque instead of slowly buckling — a sane RL starting posture. -->
+    <joint armature="1" damping="1" stiffness="30" limited="true"/>
+    <geom condim="3" density="5.0" friction="1 0.5 0.5" margin="0.01" rgba="0.55 0.55 0.58 1"/>
+    <!-- gear=40, NOT Ant's 150: spyder's 3-joint legs are efficient vertical
+         pushers, and at gear 150 a 1 kg body can jump to z=2.07 — through the
+         healthy ceiling (1.0), which SAC exploited as an eject button
+         (suicide beats paying flail costs for 1000 steps). At gear 40 the
+         max reachable height is 0.72, so like Ant (0.78 vs the same ceiling)
+         termination is physically unreachable and the hack is closed.
+         Measured, not guessed — see the gear sweep in the run notes. -->
+    <motor ctrllimited="true" ctrlrange="-1 1" gear="40"/>
+    <default class="marker">
+      <!-- Colored joint markers: red=hip, green=lift, blue=knee. Pure visuals —
+           no collisions, no mass — they document the joint layout in renders. -->
+      <geom type="sphere" size="0.095" contype="0" conaffinity="0" density="0"/>
+    </default>
+  </default>
+
+  <!-- Floor texture + skybox (same recipe as Gymnasium's ant.xml). Without a
+       ground plane the spider free-falls forever — a robot model alone is not
+       a world. -->
+  <asset>
+    <texture builtin="gradient" height="100" rgb1="1 1 1" rgb2="0 0 0" type="skybox" width="100"/>
+    <texture builtin="checker" height="100" name="texplane" rgb1="0.28 0.30 0.32" rgb2="0.38 0.40 0.42" type="2d" width="100"/>
+    <material name="MatPlane" reflectance="0.3" shininess="1" specular="1" texrepeat="60 60" texture="texplane"/>
+  </asset>
+
+  <worldbody>
+    <light cutoff="100" diffuse="1 1 1" dir="0 0 -1.3" directional="true" exponent="1" pos="0 0 1.3" specular=".1 .1 .1"/>
+    <geom conaffinity="1" condim="3" material="MatPlane" name="floor" pos="0 0 0" rgba="0.8 0.9 0.8 1" size="40 40 40" type="plane"/>
+
+    <body name="torso" pos="0 0 0.35">
+      <joint armature="0" damping="0" stiffness="0" limited="false" margin="0.01" name="root" pos="0 0 0" type="free"/>
+      <geom name="torso_geom" pos="0 0 0" size="0.25" type="sphere" rgba="0.28 0.28 0.32 1"/>
+      <!-- Coxa stubs: welded to the torso (they carry no joint), one per leg. -->
+      <geom name="stub_1" fromto="0 0 0  0.2  0.2 0" size="0.08" type="capsule"/>
+      <geom name="stub_2" fromto="0 0 0 -0.2  0.2 0" size="0.08" type="capsule"/>
+      <geom name="stub_3" fromto="0 0 0 -0.2 -0.2 0" size="0.08" type="capsule"/>
+      <geom name="stub_4" fromto="0 0 0  0.2 -0.2 0" size="0.08" type="capsule"/>
+
+      <!-- ═ Leg 1 · front-left (+x,+y) ═ -->
+      <body name="coxa_1" pos="0.2 0.2 0">
+        <joint name="hip_1" type="hinge" axis="0 0 1" pos="0 0 0" range="-40 40"/>
+        <geom class="marker" rgba="0.85 0.20 0.20 1"/>
+        <geom name="coxa_1_geom" fromto="0 0 0 0.12 0.12 0" size="0.08" type="capsule"/>
+        <body name="femur_1" pos="0.12 0.12 0">
+          <joint name="lift_1" type="hinge" axis="-1 1 0" pos="0 0 0" range="-60 60"/>
+          <geom class="marker" rgba="0.15 0.65 0.25 1"/>
+          <geom name="femur_1_geom" fromto="0 0 0 0.22 0.22 0.25" size="0.08" type="capsule"/>
+          <body name="tibia_1" pos="0.22 0.22 0.25">
+            <joint name="knee_1" type="hinge" axis="-1 1 0" pos="0 0 0" range="-50 50"/>
+            <geom class="marker" rgba="0.20 0.40 0.85 1"/>
+            <geom name="tibia_1_geom" fromto="0 0 0 0.22 0.22 -0.52" size="0.08" type="capsule"/>
+          </body>
+        </body>
+      </body>
+
+      <!-- ═ Leg 2 · front-right (-x,+y) ═ -->
+      <body name="coxa_2" pos="-0.2 0.2 0">
+        <joint name="hip_2" type="hinge" axis="0 0 1" pos="0 0 0" range="-40 40"/>
+        <geom class="marker" rgba="0.85 0.20 0.20 1"/>
+        <geom name="coxa_2_geom" fromto="0 0 0 -0.12 0.12 0" size="0.08" type="capsule"/>
+        <body name="femur_2" pos="-0.12 0.12 0">
+          <joint name="lift_2" type="hinge" axis="1 1 0" pos="0 0 0" range="-60 60"/>
+          <geom class="marker" rgba="0.15 0.65 0.25 1"/>
+          <geom name="femur_2_geom" fromto="0 0 0 -0.22 0.22 0.25" size="0.08" type="capsule"/>
+          <body name="tibia_2" pos="-0.22 0.22 0.25">
+            <joint name="knee_2" type="hinge" axis="1 1 0" pos="0 0 0" range="-50 50"/>
+            <geom class="marker" rgba="0.20 0.40 0.85 1"/>
+            <geom name="tibia_2_geom" fromto="0 0 0 -0.22 0.22 -0.52" size="0.08" type="capsule"/>
+          </body>
+        </body>
+      </body>
+
+      <!-- ═ Leg 3 · back-left (-x,-y) ═ -->
+      <body name="coxa_3" pos="-0.2 -0.2 0">
+        <joint name="hip_3" type="hinge" axis="0 0 1" pos="0 0 0" range="-40 40"/>
+        <geom class="marker" rgba="0.85 0.20 0.20 1"/>
+        <geom name="coxa_3_geom" fromto="0 0 0 -0.12 -0.12 0" size="0.08" type="capsule"/>
+        <body name="femur_3" pos="-0.12 -0.12 0">
+          <joint name="lift_3" type="hinge" axis="-1 1 0" pos="0 0 0" range="-60 60"/>
+          <geom class="marker" rgba="0.15 0.65 0.25 1"/>
+          <geom name="femur_3_geom" fromto="0 0 0 -0.22 -0.22 0.25" size="0.08" type="capsule"/>
+          <body name="tibia_3" pos="-0.22 -0.22 0.25">
+            <joint name="knee_3" type="hinge" axis="-1 1 0" pos="0 0 0" range="-50 50"/>
+            <geom class="marker" rgba="0.20 0.40 0.85 1"/>
+            <geom name="tibia_3_geom" fromto="0 0 0 -0.22 -0.22 -0.52" size="0.08" type="capsule"/>
+          </body>
+        </body>
+      </body>
+
+      <!-- ═ Leg 4 · back-right (+x,-y) ═ -->
+      <body name="coxa_4" pos="0.2 -0.2 0">
+        <joint name="hip_4" type="hinge" axis="0 0 1" pos="0 0 0" range="-40 40"/>
+        <geom class="marker" rgba="0.85 0.20 0.20 1"/>
+        <geom name="coxa_4_geom" fromto="0 0 0 0.12 -0.12 0" size="0.08" type="capsule"/>
+        <body name="femur_4" pos="0.12 -0.12 0">
+          <joint name="lift_4" type="hinge" axis="1 1 0" pos="0 0 0" range="-60 60"/>
+          <geom class="marker" rgba="0.15 0.65 0.25 1"/>
+          <geom name="femur_4_geom" fromto="0 0 0 0.22 -0.22 0.25" size="0.08" type="capsule"/>
+          <body name="tibia_4" pos="0.22 -0.22 0.25">
+            <joint name="knee_4" type="hinge" axis="1 1 0" pos="0 0 0" range="-50 50"/>
+            <geom class="marker" rgba="0.20 0.40 0.85 1"/>
+            <geom name="tibia_4_geom" fromto="0 0 0 0.22 -0.22 -0.52" size="0.08" type="capsule"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <!-- Clean per-leg order (leg 1..4: hip, lift, knee). Action index meaning is
+         positional — this order is the Spyder-v0 action-space contract. -->
+    <motor name="hip_1"  joint="hip_1"/>
+    <motor name="lift_1" joint="lift_1"/>
+    <motor name="knee_1" joint="knee_1"/>
+    <motor name="hip_2"  joint="hip_2"/>
+    <motor name="lift_2" joint="lift_2"/>
+    <motor name="knee_2" joint="knee_2"/>
+    <motor name="hip_3"  joint="hip_3"/>
+    <motor name="lift_3" joint="lift_3"/>
+    <motor name="knee_3" joint="knee_3"/>
+    <motor name="hip_4"  joint="hip_4"/>
+    <motor name="lift_4" joint="lift_4"/>
+    <motor name="knee_4" joint="knee_4"/>
+  </actuator>
+</mujoco>

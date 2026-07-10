@@ -36,6 +36,7 @@ import numpy as np
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import BaseCallback
 
+import envs  # noqa: F401 -- registers Spyder-v0 with Gymnasium
 from wrappers import WRAPPERS
 
 DEFAULT_ENV = "Ant-v5"

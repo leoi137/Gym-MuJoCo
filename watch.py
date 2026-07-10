@@ -17,6 +17,8 @@ from pathlib import Path
 import gymnasium as gym
 from stable_baselines3 import SAC
 
+import envs  # noqa: F401 -- registers Spyder-v0 with Gymnasium
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__,
