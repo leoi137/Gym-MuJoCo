@@ -25,12 +25,13 @@
     <joint armature="1" damping="1" stiffness="30" limited="true"/>
     <geom condim="3" density="5.0" friction="1 0.5 0.5" margin="0.01" rgba="0.55 0.55 0.58 1"/>
     <!-- gear=40, NOT Ant's 150: spyder's 3-joint legs are efficient vertical
-         pushers, and at gear 150 a 1 kg body can jump to z=2.07 — through the
-         healthy ceiling (1.0), which SAC exploited as an eject button
-         (suicide beats paying flail costs for 1000 steps). At gear 40 the
-         max reachable height is 0.72, so like Ant (0.78 vs the same ceiling)
-         termination is physically unreachable and the hack is closed.
-         Measured, not guessed — see the gear sweep in the run notes. -->
+         pushers, and at gear 150 a 1 kg body launches itself violently
+         (naive pumping alone reaches z=2.07). Note gear reduction did NOT fix
+         the suicide reward hack — SAC still found a spring-loaded jump to
+         z=2.43 at gear 40. The actual fix is the reward budget in
+         envs/spyder_env.py (living net-positive for any policy); lower gear
+         is kept because calmer dynamics train better and read better.
+         Full postmortem: envs/spyder_env.py module docstring. -->
     <motor ctrllimited="true" ctrlrange="-1 1" gear="40"/>
     <default class="marker">
       <!-- Colored joint markers: red=hip, green=lift, blue=knee. Pure visuals —
