@@ -67,6 +67,28 @@ Humanoid-v5 is the hardest of the three — a 17-DoF 3D biped with a ~350-dim ob
 python watch.py --run humanoid_baseline   # watch this policy live
 ```
 
+### Spyder-v0 (custom 12-DoF spider)
+
+<p align="center">
+  <img src="assets/spyder_walk_v3.gif" alt="SAC policy on the custom Spyder-v0 spider environment" width="400"/>
+</p>
+
+<p align="center">
+  <em>Custom Spyder-v0 (Ant-style reward + upright termination) — a fast four-legged bounding run.</em>
+</p>
+
+| Run | Reward function | Steps | Best eval return | Gait |
+| --- | --- | --- | --- | --- |
+| `spyder_walk_v3` | Spyder-v0 default (Ant-style + upright termination) | 3.75M | 7,392 | fast four-legged bounding run |
+
+Spyder-v0 is this repo's own environment: a 12-DoF spider (model in `assets/spyder12.xml`, env in `envs/spyder_env.py`) with an Ant-style reward plus an upright-termination rule. Earlier versions got reward-hacked twice — first a jump-to-termination exploit, then a cartwheeling gait — and the fixes are written up as a postmortem in the `envs/spyder_env.py` docstring. With both loopholes closed, SAC trained clean: an upright 3.2 m/s walk by 400K steps (eval 3,457), accelerating into a ~6.5 m/s bounding run by 3.75M (eval 7,392) with full 1000-step episodes.
+
+> Viewing note: the floor's checker texture is only rendered over an 80×80 m patch around the origin (`size="40 40 40"` on the plane geom — collisions are infinite, rendering isn't). The spider outruns it mid-episode, so late frames in the eval videos show it running against a bare horizon. It's on the ground the whole time.
+
+```bash
+python watch.py --run spyder_walk_v3   # watch this policy live
+```
+
 ## Install
 
 ```bash
@@ -205,6 +227,7 @@ The wrapper lives in `wrappers.py` as `FootContactRewardWrapper` and is register
 | `train.py` | train / resume SAC on any MuJoCo env (per-run `--env`, output dir, optional wrapper) |
 | `watch.py` | render a chosen run's best policy in a window (env read from its `config.json`) |
 | `wrappers.py` | reward-shaping wrappers (currently `FootContactRewardWrapper`, Ant-only) and the `WRAPPERS` registry |
+| `envs/` | custom Gymnasium environments (`Spyder-v0`) — `import envs` registers them, which `train.py`/`watch.py` do automatically |
 | `runs/<name>/` | one self-contained experiment — model, buffer, TB logs, videos, config |
 | `assets/` | GIFs used by this README |
 
