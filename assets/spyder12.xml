@@ -54,6 +54,10 @@
     <geom conaffinity="1" condim="3" material="MatPlane" name="floor" pos="0 0 0" rgba="0.8 0.9 0.8 1" size="40 40 40" type="plane"/>
 
     <body name="torso" pos="0 0 0.35">
+      <!-- Gymnasium's offscreen renderer looks up a camera named "track" when
+           none is specified (same as ant.xml); without it, eval videos fall
+           back to a static free camera and the spider walks out of frame. -->
+      <camera name="track" mode="trackcom" pos="0 -3 0.3" xyaxes="1 0 0 0 0 1"/>
       <joint armature="0" damping="0" stiffness="0" limited="false" margin="0.01" name="root" pos="0 0 0" type="free"/>
       <geom name="torso_geom" pos="0 0 0" size="0.25" type="sphere" rgba="0.28 0.28 0.32 1"/>
       <!-- Coxa stubs: welded to the torso (they carry no joint), one per leg. -->
