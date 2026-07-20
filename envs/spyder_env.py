@@ -42,9 +42,22 @@ uses the Hopper mechanism, which is exploit-agnostic: ctrl weight 0.1
 makes being alive pay ~+0.6/step even while flailing, so no reachable
 termination can ever out-earn living. Gear stays 40 (calmer dynamics).
 
-Termination: torso z leaves [0.2, 1.0] (fallen / launched) or any state
-value goes non-finite. Truncation at 1000 steps is handled by the
-registration in envs/__init__.py, not here.
+Postmortem, chapter 3 (v2, 400K steps): closing the suicide hack opened a
+subtler one. Raising the z-ceiling to 3.0 removed the constraint that had
+implicitly kept Ant upright (any flip exits Ant's tight [0.2, 1.0] band),
+and nothing else in the reward mentions orientation — so SAC learned a
+fast cartwheeling gait: 1.2-1.6 m/s with the torso inverted 33-45% of
+steps. Correct per the spec; the spec just never said "on your feet".
+v3's fix is the upright termination below, which is only safe BECAUSE of
+v2's reward budget: with living net-positive for any policy, terminating
+on a flip is pure lost income, so the optimizer avoids tipping instead of
+seeking it. The two mechanisms compose — alive-net-positive closes
+seek-termination hacks, upright-termination closes tumbling.
+
+Termination: torso z leaves [0.2, 3.0] (fallen through floor / launched),
+torso tilts past ~78 degrees (up-vector's world-z drops below 0.2), or
+any state value goes non-finite. Truncation at 1000 steps is handled by
+the registration in envs/__init__.py, not here.
 """
 from __future__ import annotations
 
@@ -96,6 +109,15 @@ class SpyderEnv(MujocoEnv, utils.EzPickle):
         # The 0.2 floor is physically unreachable (torso sphere r=0.25 rests
         # at 0.25) and kept only as a NaN/penetration guard.
         healthy_z_range: tuple[float, float] = (0.2, 3.0),
+        # Minimum world-z component of the torso's up axis: 1.0 = perfectly
+        # upright, 0.0 = lying on its side, -1.0 = upside down. 0.2 terminates
+        # past ~78 degrees of tilt — far beyond anything a walking gait needs
+        # (a healthy stance sits near 1.0; reset noise tilts at most a few
+        # degrees) but well before the torso goes over. This is what Ant gets
+        # implicitly from its tight z-band and Humanoid from z >= 1.0; our
+        # 3.0 ceiling (kept from v2, see above) provides no such coupling, so
+        # orientation must be policed explicitly.
+        healthy_up_threshold: float = 0.2,
         contact_force_range: tuple[float, float] = (-1.0, 1.0),
         reset_noise_scale: float = 0.1,
         **kwargs,
@@ -110,6 +132,7 @@ class SpyderEnv(MujocoEnv, utils.EzPickle):
             healthy_reward,
             terminate_when_unhealthy,
             healthy_z_range,
+            healthy_up_threshold,
             contact_force_range,
             reset_noise_scale,
             **kwargs,
@@ -120,6 +143,7 @@ class SpyderEnv(MujocoEnv, utils.EzPickle):
         self._healthy_reward = healthy_reward
         self._terminate_when_unhealthy = terminate_when_unhealthy
         self._healthy_z_range = healthy_z_range
+        self._healthy_up_threshold = healthy_up_threshold
         self._contact_force_range = contact_force_range
         self._reset_noise_scale = reset_noise_scale
 
@@ -148,10 +172,21 @@ class SpyderEnv(MujocoEnv, utils.EzPickle):
     # --- Reward pieces -------------------------------------------------------
 
     @property
+    def torso_upright(self) -> float:
+        # xmat is the torso's 3x3 rotation matrix (row-major); element [2,2]
+        # is the world-z component of the body's local +z axis — a direct
+        # "how upright am I" scalar with no quaternion math needed.
+        return float(self.data.body("torso").xmat[8])
+
+    @property
     def is_healthy(self) -> bool:
         state = self.state_vector()
         min_z, max_z = self._healthy_z_range
-        return bool(np.isfinite(state).all() and min_z <= state[2] <= max_z)
+        return bool(
+            np.isfinite(state).all()
+            and min_z <= state[2] <= max_z
+            and self.torso_upright >= self._healthy_up_threshold
+        )
 
     def control_cost(self, action: np.ndarray) -> float:
         return self._ctrl_cost_weight * float(np.sum(np.square(action)))
@@ -192,6 +227,9 @@ class SpyderEnv(MujocoEnv, utils.EzPickle):
             "y_position": float(self.data.body("torso").xpos[1]),
             "x_velocity": float(x_velocity),
             "y_velocity": float(y_velocity),
+            # Diagnostic for the v2 tumbling postmortem: lets eval scripts
+            # verify a gait is genuinely upright, not just fast.
+            "torso_upright": self.torso_upright,
         }
         if self.render_mode == "human":
             self.render()
