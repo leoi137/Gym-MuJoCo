@@ -26,6 +26,12 @@ Heightfields, stairs, rocks, slopes — difficulty ramps up as the policy improv
 
 - Curriculum learning + domain randomization
 - Deliverable: spider climbing over rocks (the genuinely impressive video)
+- **Started early (2026-07-24):** SpyderDesert-v0 landed — procedural desert
+  heightfield (make_terrain.py: fractal dunes + distance-gated mountains,
+  which IS a spatial curriculum along +x), terrain-aware health checks, and a
+  fine-tune run (`runs/spyder_desert_v0`) seeded from the spyder_walk_v3
+  checkpoint. Remaining for this step: per-reset terrain randomization and
+  terrain observation (height samples) for non-blind climbing.
 
 ## Step 4 — Multi-Spider Cooperation
 
