@@ -73,13 +73,19 @@
     <light cutoff="100" diffuse="1 0.96 0.88" dir="0.45 0.25 -0.86" directional="true" exponent="1" pos="0 0 10" mode="trackcom" specular=".1 .1 .1"/>
     <!-- The desert floor. pos z = generator's printed h_min offset, placing
          the spawn-pad surface at world z = 0 (where the robot expects it).
-         Contact is tuned toward dry granular ground, within what a rigid
-         heightfield can express: sliding friction 0.8 (loose sand grips less
-         than the flat world's 1.0) and a softer constraint (solref 0.04 s,
-         solimp floor 0.6) so feet visibly settle a centimeter or two into
-         the surface under load instead of clacking on glass. True granular
-         flow (footprints, sand avalanches) is beyond any rigid-body engine. -->
-    <geom conaffinity="1" condim="3" name="floor" type="hfield" hfield="desert" material="MatDesert" pos="0 0 -0.41" friction="0.8 0.5 0.5" solref="0.04 1" solimp="0.6 0.9 0.02"/>
+         Contact realism: real desert surface under a ~1 kg robot is FIRM —
+         pavement and rock are rigid, and even loose dune sand yields only
+         ~1-2 cm to feet this light. MuJoCo's default contact (solref 0.02,
+         critically damped — no bounce) is already the right model, and it is
+         exactly what the flat world uses, so the ground feels identical to
+         every Gymnasium env. The one sand-specific term kept is sliding
+         friction 0.8: dry sand shears under tangential load more easily
+         than the flat world's 1.0. Two earlier "soft sand" tunes (solref
+         0.04 / dampratio 2) read as quicksand on video — in MuJoCo's model
+         dampratio SOFTENS stiffness (k ~ 1/dampratio^2), it does not add
+         firm dissipation. True granular flow (footprints, avalanching) is
+         beyond any rigid-body engine. -->
+    <geom conaffinity="1" condim="3" name="floor" type="hfield" hfield="desert" material="MatDesert" pos="0 0 -0.41" friction="0.8 0.5 0.5"/>
 
     <body name="torso" pos="0 0 0.35">
       <camera name="track" mode="trackcom" pos="0 -3 0.3" xyaxes="1 0 0 0 0 1"/>
