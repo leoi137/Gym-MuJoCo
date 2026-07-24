@@ -58,11 +58,30 @@ Termination: torso z leaves [0.2, 3.0] (fallen through floor / launched),
 torso tilts past ~78 degrees (up-vector's world-z drops below 0.2), or
 any state value goes non-finite. Truncation at 1000 steps is handled by
 the registration in envs/__init__.py, not here.
+
+Terrain (Spyder-Desert-v0): the same class also runs spyder12_desert.xml,
+which swaps the plane for a procedural desert heightfield (make_terrain.py).
+The robot subtree is identical, so obs/action spaces don't change and a
+flat-world checkpoint loads directly. Two things must become terrain-aware:
+
+  * the healthy z-band — world-absolute z is meaningless on a hill, so the
+    check uses height ABOVE THE GROUND under the torso, read from the
+    compiled heightfield with bilinear interpolation. On the flat XML there
+    is no hfield and the lookup returns 0, reducing to the old rule.
+  * the spawn height — init_qpos z is re-based off the measured ground
+    height at the origin, so a regenerated terrain can't break resets.
+
+Note the policy is BLIND to the terrain ahead: no height samples are added
+to the observation. It feels the ground only through contacts and posture,
+like the blind-quadruped line of legged-robot work — robustness must come
+from the gait, not from planning. (Terrain vision would change the obs
+space and orphan the flat-world checkpoint; a deliberate v-next step.)
 """
 from __future__ import annotations
 
 from pathlib import Path
 
+import mujoco
 import numpy as np
 from gymnasium import utils
 from gymnasium.envs.mujoco import MujocoEnv
@@ -169,6 +188,51 @@ class SpyderEnv(MujocoEnv, utils.EzPickle):
             low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float64
         )
 
+        # Terrain support (see module docstring). If the model carries a
+        # heightfield, cache what the ground lookup needs and re-base the
+        # spawn height off the measured ground at the origin. hfield_data is
+        # MuJoCo-normalized to [0,1]; world elevation = geom_z + data * z_size.
+        self._hfield = None
+        if self.model.nhfield > 0:
+            geom_ids = np.nonzero(
+                self.model.geom_type == mujoco.mjtGeom.mjGEOM_HFIELD
+            )[0]
+            hid = int(self.model.geom_dataid[geom_ids[0]])
+            nrow = int(self.model.hfield_nrow[hid])
+            ncol = int(self.model.hfield_ncol[hid])
+            self._hfield = {
+                "data": self.model.hfield_data.reshape(nrow, ncol),
+                "size": self.model.hfield_size[hid].copy(),  # (rx, ry, z, base)
+                "pos": self.model.geom_pos[geom_ids[0]].copy(),
+            }
+            self.init_qpos[2] += self._ground_height_at(0.0, 0.0)
+
+    # --- Terrain -------------------------------------------------------------
+
+    def _ground_height_at(self, x: float, y: float) -> float:
+        """World-z of the terrain surface under (x, y); 0 on the flat model.
+
+        Bilinear interpolation over the heightfield grid — the same surface
+        MuJoCo collides against (its hfield collider triangulates these
+        cells). Coordinates beyond the field clamp to the edge cell.
+        """
+        if self._hfield is None:
+            return 0.0
+        data = self._hfield["data"]
+        rx, ry, zscale = self._hfield["size"][:3]
+        nrow, ncol = data.shape
+        # Grid coordinates: col 0..ncol-1 spans x in [-rx, rx], rows span y.
+        cx = (x - self._hfield["pos"][0] + rx) / (2 * rx) * (ncol - 1)
+        cy = (y - self._hfield["pos"][1] + ry) / (2 * ry) * (nrow - 1)
+        cx = min(max(cx, 0.0), ncol - 1.0)
+        cy = min(max(cy, 0.0), nrow - 1.0)
+        c0, r0 = int(min(cx, ncol - 2)), int(min(cy, nrow - 2))
+        fx, fy = cx - c0, cy - r0
+        v = (data[r0, c0] * (1 - fx) + data[r0, c0 + 1] * fx) * (1 - fy) + (
+            data[r0 + 1, c0] * (1 - fx) + data[r0 + 1, c0 + 1] * fx
+        ) * fy
+        return float(self._hfield["pos"][2] + v * zscale)
+
     # --- Reward pieces -------------------------------------------------------
 
     @property
@@ -179,12 +243,20 @@ class SpyderEnv(MujocoEnv, utils.EzPickle):
         return float(self.data.body("torso").xmat[8])
 
     @property
+    def height_above_ground(self) -> float:
+        # Torso z relative to the terrain surface directly below it. On the
+        # flat model this IS torso z, so the health rule below is unchanged
+        # for Spyder-v0.
+        pos = self.data.body("torso").xpos
+        return float(pos[2]) - self._ground_height_at(float(pos[0]), float(pos[1]))
+
+    @property
     def is_healthy(self) -> bool:
         state = self.state_vector()
         min_z, max_z = self._healthy_z_range
         return bool(
             np.isfinite(state).all()
-            and min_z <= state[2] <= max_z
+            and min_z <= self.height_above_ground <= max_z
             and self.torso_upright >= self._healthy_up_threshold
         )
 
@@ -230,6 +302,8 @@ class SpyderEnv(MujocoEnv, utils.EzPickle):
             # Diagnostic for the v2 tumbling postmortem: lets eval scripts
             # verify a gait is genuinely upright, not just fast.
             "torso_upright": self.torso_upright,
+            # Terrain diagnostic: what the healthy z-band actually checks.
+            "height_above_ground": self.height_above_ground,
         }
         if self.render_mode == "human":
             self.render()
